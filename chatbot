@@ -1,0 +1,77 @@
+import streamlit as st
+import time
+#import random
+
+st.set_page_config(page_title="AI Advisor", page_icon="💬")
+
+st.header("💬 Retention Strategy Advisor")
+
+# 1. Check if data exists
+if 'analysis_done' not in st.session_state or not st.session_state['analysis_done']:
+    st.warning("⚠️ No customer data found.")
+    st.markdown("Please go to the **Predictor** page first to analyze a customer.")
+    st.stop()
+
+# Retrieve Data
+customer = st.session_state['current_customer_data']
+risk = st.session_state['current_churn_risk']
+
+# Display Context
+with st.expander("View Analyzed Customer Context", expanded=False):
+    st.write(customer)
+    st.metric("Calculated Risk", f"{risk:.1%}")
+
+
+# 2. Chat Logic
+def get_smart_response(prompt):
+    prompt = prompt.lower()
+
+    # Dynamic logic based on the stored session state
+    if "why" in prompt:
+        reasons = []
+        if customer['Contract'] == 'Month-to-month': reasons.append("the volatile month-to-month contract")
+        if customer['Tenure'] < 12: reasons.append("their short history with us (new customer)")
+        if customer['MonthlyCharges'] > 80: reasons.append("high monthly costs compared to market average")
+
+        if reasons:
+            return f"Based on the model, the key drivers are {', '.join(reasons)}."
+        return "The risk is driven by a complex combination of usage patterns and total charges."
+
+    elif "offer" in prompt or "discount" in prompt:
+        if risk > 0.7:
+            return f"Since risk is critical ({risk:.1%}), authorized offers include: **20% discount for 6 months** OR **Free upgrade to Fiber Optic**."
+        elif risk > 0.4:
+            return "Risk is moderate. Offer a **10% loyalty discount** if they switch to a 1-year contract."
+        else:
+            return "No discount recommended. The customer is stable. Just send a satisfaction survey."
+
+    else:
+        return f"I'm analyzing a customer with **{customer['InternetService']}** service and **{customer['Contract']}** contract. Ask me 'Why are they leaving?' or 'What offer should I give?'"
+
+
+# 3. Chat Interface
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant",
+         "content": f"I have the file for the customer on the **{customer['Contract']}** plan. Risk is **{risk:.1%}**. How can I assist?"}
+    ]
+
+# Display History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
+# Handle Input
+if prompt := st.chat_input("Ask retention strategy..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.write(prompt)
+
+    # Simulate 'Thinking'
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing policy database..."):
+            time.sleep(0.8)  # Fake latency for realism
+            response = get_smart_response(prompt)
+            st.write(response)
+
+    st.session_state.messages.append({"role": "assistant", "content": response})
