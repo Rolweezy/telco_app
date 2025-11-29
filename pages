@@ -1,0 +1,77 @@
+#predictionpage
+import streamlit as st
+import pandas as pd
+from utils import load_model_from_gcs
+
+st.set_page_config(page_title="Churn Predictor", page_icon="🔮")
+
+st.header("🔮 Customer Churn Predictor")
+
+# 1. Load Model
+with st.spinner('Fetching model from Google Cloud...'):
+    model = load_model_from_gcs()
+
+if model is None:
+    st.stop()
+
+# 2. Input Form
+st.subheader("Customer Profile")
+col1, col2 = st.columns(2)
+
+with col1:
+    tenure = st.number_input('Tenure (Months)', min_value=0, max_value=72, value=12)
+    monthly_charges = st.number_input('Monthly Charges ($)', min_value=0.0, value=70.0)
+    contract = st.selectbox('Contract Type', ['Month-to-month', 'One year', 'Two year'])
+
+with col2:
+    internet_service = st.selectbox('Internet Service', ['DSL', 'Fiber optic', 'No'])
+    payment_method = st.selectbox('Payment Method',
+                                  ['Electronic check', 'Mailed check', 'Bank transfer', 'Credit card'])
+    total_charges = st.number_input('Total Charges ($)', value=tenure * monthly_charges)
+
+# 3. Preprocessing (Simplified for mapping)
+# In production, you should load the Encoder from GCS as well.
+mapping = {
+    'Month-to-month': 0, 'One year': 1, 'Two year': 2,
+    'DSL': 0, 'Fiber optic': 1, 'No': 2,
+    'Electronic check': 2, 'Mailed check': 3, 'Bank transfer': 0, 'Credit card': 1
+}
+
+input_dict = {
+    'Tenure': tenure,
+    'MonthlyCharges': monthly_charges,
+    'TotalCharges': total_charges,
+    'Contract': contract,
+    'InternetService': internet_service,
+    'PaymentMethod': payment_method
+}
+
+# Convert to DataFrame for model
+features = [
+    tenure, monthly_charges, total_charges,
+    mapping.get(contract, 0),
+    mapping.get(internet_service, 0),
+    mapping.get(payment_method, 0)
+]
+features_df = pd.DataFrame([features],
+                           columns=['Tenure', 'MonthlyCharges', 'TotalCharges', 'Contract', 'InternetService',
+                                    'PaymentMethod'])
+
+# 4. Predict Button
+if st.button("Analyze Churn Risk", type="primary"):
+    prediction_prob = model.predict_proba(features_df)[0][1]
+
+    # Display Result
+    st.divider()
+    if prediction_prob > 0.5:
+        st.error(f"⚠️ High Churn Risk: {prediction_prob:.1%}")
+    else:
+        st.success(f"✅ Low Churn Risk: {prediction_prob:.1%}")
+
+    # 5. SAVE STATE FOR CHATBOT
+    # This is the crucial step that connects the two pages
+    st.session_state['current_customer_data'] = input_dict
+    st.session_state['current_churn_risk'] = prediction_prob
+    st.session_state['analysis_done'] = True
+
+    st.toast("Analysis saved! Go to the 'AI Advisor' page to discuss this case.", icon="💾")
